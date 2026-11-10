@@ -1,0 +1,15 @@
+\begin{tabular}{lcccccc}
+\toprule
+Method & Macro-F1 (client) & Macro-F1 (global) & Accuracy & False-alarm rate & Uplink (B/client/round) & Latency (ms)\\
+\midrule
+Centralized MLP & 0.988 $\pm$ 0.006 & 0.981 $\pm$ 0.006 & 0.998 $\pm$ 0.000 & 0.001 $\pm$ 0.001 & -- & 0.0245 $\pm$ 0.0031\\
+Decision tree (central, depth 10) & 0.984 $\pm$ 0.010 & 0.978 $\pm$ 0.012 & 0.994 $\pm$ 0.002 & 0.004 $\pm$ 0.002 & -- & 0.0683 $\pm$ 0.0083\\
+Local-only & 0.922 $\pm$ 0.032 & 0.661 $\pm$ 0.112 & 0.872 $\pm$ 0.097 & 0.118 $\pm$ 0.132 & 0 & 0.0245 $\pm$ 0.0029\\
+FedAvg & 0.928 $\pm$ 0.023 & 0.934 $\pm$ 0.019 & 0.994 $\pm$ 0.001 & 0.002 $\pm$ 0.001 & 29592 & 0.0256 $\pm$ 0.0063\\
+FedProx & 0.931 $\pm$ 0.022 & 0.936 $\pm$ 0.015 & 0.995 $\pm$ 0.001 & 0.002 $\pm$ 0.001 & 29592 & 0.0259 $\pm$ 0.0027\\
+FedAvg + sparsification/int8 & 0.931 $\pm$ 0.027 & 0.933 $\pm$ 0.021 & 0.994 $\pm$ 0.001 & 0.002 $\pm$ 0.001 & 2224 & 0.0243 $\pm$ 0.0029\\
+FedPer (personalized head, dense) & 0.941 $\pm$ 0.023 & 0.733 $\pm$ 0.105 & 0.923 $\pm$ 0.077 & 0.071 $\pm$ 0.113 & 28800 & 0.0293 $\pm$ 0.0089\\
+Ditto & 0.946 $\pm$ 0.037 & 0.852 $\pm$ 0.076 & 0.965 $\pm$ 0.045 & 0.014 $\pm$ 0.028 & 29592 & 0.0254 $\pm$ 0.0033\\
+Proposed (FedLite-P) & 0.936 $\pm$ 0.020 & 0.721 $\pm$ 0.109 & 0.923 $\pm$ 0.076 & 0.072 $\pm$ 0.115 & 2164 & 0.0243 $\pm$ 0.0026\\
+\bottomrule
+\end{tabular}

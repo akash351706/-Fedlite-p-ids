@@ -1,0 +1,100 @@
+Facts below are computed from results_insdn_r100.json; write the paper ONLY from these numbers.
+Config: {"K": 20, "rounds": 100, "E": 1, "lr": 0.001, "bs": 128, "mu": 0.01, "ditto_lambda": 0.1, "cw_exp": 0.5, "cw_cap": 10.0, "tree_depth": 10, "n_client_eval": 500, "rho": 0.1}
+======================================================================
+DATASET: InSDN
+runs (seeds): 5
+
+-- Main setting: mean +- 95% t-interval over runs --
+client-test macro-F1:
+   Centralized MLP                    0.9880 +- 0.0059
+   Decision tree (central, depth 10)  0.9842 +- 0.0096
+   Local-only                         0.9218 +- 0.0316
+   FedAvg                             0.9282 +- 0.0227
+   FedProx                            0.9313 +- 0.0216
+   FedAvg + sparsification/int8       0.9310 +- 0.0267
+   FedPer (personalized head, dense)  0.9408 +- 0.0228
+   Ditto                              0.9459 +- 0.0369
+   Proposed (FedLite-P)               0.9357 +- 0.0203
+global-test macro-F1:
+   Centralized MLP                    0.9815 +- 0.0064
+   Decision tree (central, depth 10)  0.9777 +- 0.0119
+   Local-only                         0.6611 +- 0.1120
+   FedAvg                             0.9343 +- 0.0186
+   FedProx                            0.9364 +- 0.0153
+   FedAvg + sparsification/int8       0.9330 +- 0.0206
+   FedPer (personalized head, dense)  0.7332 +- 0.1051
+   Ditto                              0.8515 +- 0.0763
+   Proposed (FedLite-P)               0.7207 +- 0.1093
+global false-alarm rate:
+   Centralized MLP                    0.0011 +- 0.0007
+   Decision tree (central, depth 10)  0.0037 +- 0.0021
+   Local-only                         0.1182 +- 0.1323
+   FedAvg                             0.0016 +- 0.0012
+   FedProx                            0.0015 +- 0.0006
+   FedAvg + sparsification/int8       0.0018 +- 0.0008
+   FedPer (personalized head, dense)  0.0708 +- 0.1129
+   Ditto                              0.0139 +- 0.0281
+   Proposed (FedLite-P)               0.0724 +- 0.1154
+Highest mean client-test macro-F1: Centralized MLP
+Highest mean client-test macro-F1 among federated/local methods: Ditto
+Highest mean global-test macro-F1: Centralized MLP
+Highest mean global-test macro-F1 among federated/local methods: FedProx
+
+-- Paired differences, Proposed minus other (same runs), 95% t-interval --
+   vs Centralized MLP                    client F1 -0.0523 +- 0.0189  [SIGNIFICANT]
+   vs Centralized MLP                    global F1 -0.2608 +- 0.1056  [SIGNIFICANT]
+   vs Decision tree (central, depth 10)  client F1 -0.0485 +- 0.0277  [SIGNIFICANT]
+   vs Decision tree (central, depth 10)  global F1 -0.2570 +- 0.1072  [SIGNIFICANT]
+   vs Local-only                         client F1 +0.0139 +- 0.0272  [not significant]
+   vs Local-only                         global F1 +0.0596 +- 0.0322  [SIGNIFICANT]
+   vs FedAvg                             client F1 +0.0074 +- 0.0094  [not significant]
+   vs FedAvg                             global F1 -0.2136 +- 0.0926  [SIGNIFICANT]
+   vs FedProx                            client F1 +0.0043 +- 0.0206  [not significant]
+   vs FedProx                            global F1 -0.2157 +- 0.0986  [SIGNIFICANT]
+   vs FedAvg + sparsification/int8       client F1 +0.0047 +- 0.0084  [not significant]
+   vs FedAvg + sparsification/int8       global F1 -0.2123 +- 0.0969  [SIGNIFICANT]
+   vs FedPer (personalized head, dense)  client F1 -0.0051 +- 0.0107  [not significant]
+   vs FedPer (personalized head, dense)  global F1 -0.0125 +- 0.0234  [not significant]
+   vs Ditto                              client F1 -0.0103 +- 0.0404  [not significant]
+   vs Ditto                              global F1 -0.1308 +- 0.0564  [SIGNIFICANT]
+
+-- Communication (uplink bytes/client/round) --
+   FedAvg                             29592
+   FedAvg + sparsification/int8       2224
+   FedPer (personalized head, dense)  28800
+   Ditto                              29592
+   Proposed (FedLite-P)               2164
+Uplink reduction of Proposed vs FedAvg: 13.7x; vs FedPer: 13.3x; vs FedAvg+sparsification/int8: 1.03x
+
+-- Ablation (client-test macro-F1) --
+   FedAvg                             0.9282 +- 0.0227
+   FedAvg + sparsification/int8       0.9310 +- 0.0267
+   FedPer (personalized head, dense)  0.9408 +- 0.0228
+   Proposed (FedLite-P)               0.9357 +- 0.0203
+   effect of personalization (FedPer - FedAvg): +0.0126 +- 0.0157
+   effect of compression on personalized model (FedLite-P - FedPer): -0.0051 +- 0.0107
+
+-- Per-class recall (global test): lowest classes and Proposed minus Centralized --
+   Centralized MLP                    benign=0.999  dos=0.998  recon=0.998  bruteforce=0.970  web=0.949  malware=1.000
+   Decision tree (central, depth 10)  benign=0.996  dos=0.994  recon=0.997  bruteforce=0.935  web=0.969  malware=1.000
+   Local-only                         benign=0.882  dos=0.847  recon=0.908  bruteforce=0.637  web=0.495  malware=0.658
+   FedAvg                             benign=0.998  dos=0.997  recon=0.998  bruteforce=0.897  web=0.744  malware=1.000
+   FedProx                            benign=0.998  dos=0.997  recon=0.997  bruteforce=0.904  web=0.733  malware=1.000
+   FedAvg + sparsification/int8       benign=0.998  dos=0.997  recon=0.997  bruteforce=0.891  web=0.738  malware=1.000
+   FedPer (personalized head, dense)  benign=0.929  dos=0.932  recon=0.929  bruteforce=0.700  web=0.556  malware=0.719
+   Ditto                              benign=0.986  dos=0.949  recon=0.972  bruteforce=0.836  web=0.646  malware=0.970
+   Proposed (FedLite-P)               benign=0.928  dos=0.931  recon=0.933  bruteforce=0.679  web=0.576  malware=0.687
+   recall benign     Proposed - Central: -0.071 +- 0.115
+   recall dos        Proposed - Central: -0.067 +- 0.055
+   recall recon      Proposed - Central: -0.066 +- 0.123
+   recall bruteforce Proposed - Central: -0.291 +- 0.212
+   recall web        Proposed - Central: -0.372 +- 0.072
+   recall malware    Proposed - Central: -0.313 +- 0.169
+
+-- Rounds to reach 95% of the centralized client-test F1 (target 0.939), mean over runs that reach it --
+   FedAvg                             reached in 2/5 runs; mean round 83.0
+   FedProx                            reached in 3/5 runs; mean round 81.7
+   FedAvg + sparsification/int8       reached in 2/5 runs; mean round 72.5
+   FedPer (personalized head, dense)  reached in 3/5 runs; mean round 53.0
+   Ditto                              reached in 4/5 runs; mean round 47.2
+   Proposed (FedLite-P)               reached in 2/5 runs; mean round 49.0
