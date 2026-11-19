@@ -1,6 +1,6 @@
 # FedLite-P: lightweight federated intrusion detection for SDN-enabled IoT
 
-Code and raw results for the paper *"Lightweight Federated Intrusion Detection for SDN-Enabled IoT Networks with Non-IID Traffic and Communication-Efficient Personalized Updates"* (Akash, A. Asha).
+Code and raw results for the paper *"Lightweight Federated Intrusion Detection for SDN-Enabled IoT Networks with Non-IID Traffic and Communication-Efficient Personalized Updates"* (Akash B).
 
 The code is plain Python (NumPy, SciPy, pandas, scikit-learn, matplotlib). No GPU is needed.
 
@@ -11,6 +11,7 @@ The code is plain Python (NumPy, SciPy, pandas, scikit-learn, matplotlib). No GP
 | `fl.py` | NumPy MLP; FedAvg, FedProx, FedAvg+sparsification/int8, FedPer, Ditto, local-only, **FedLite-P**; centralized MLP and decision tree |
 | `run_experiments.py` | main comparison (5 seeds); writes a results JSON |
 | `sweeps100.py` | alpha and rho sweeps at 100 rounds (5 seeds) |
+| `exp_extra.py` | FedLite-PG (additional global head) and label-flipping poisoning experiments, 5 seeds |
 | `merge_results.py` | merges main run and sweeps into one file |
 | `make_outputs.py` | LaTeX tables, figures and `summary.txt` (facts only) |
 | `results/` | raw results used in the paper, summary, tables and figures |
@@ -38,6 +39,13 @@ Quick check on synthetic data (numbers are meaningless, never report them):
 ```
 python run_experiments.py --synthetic --seeds 1 --rounds 3 --no-sweeps --out test.json
 ```
+
+To reproduce the FedLite-PG and poisoning experiments (about 25 minutes on one core):
+```
+python exp_extra.py --data-dir DATA --out results/extra_results.json
+```
+Result keys: `pg|alpha=...|seed` (FedLite-PG, with a lambda sweep stored under `lam_sweep`) and `poison2|method|frac=...|seed` (poisoning, honest clients only).
+Keys starting with `poison|` come from a first run that also scored the malicious clients' own models; they are kept for transparency and are not used in the paper.
 
 ## Protocol summary
 K = 20 clients, class-wise Dirichlet partition (alpha = 0.5 main), E = 1 local epoch, Adam (lr 1e-3, batch 128), MLP 64-32, FedProx mu = 0.01, Ditto lambda = 0.1,

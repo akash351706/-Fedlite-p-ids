@@ -52,6 +52,40 @@ def loss_grad(th, g, X, y, cw, d, C):
     d1 = (d2 @ W2.T) * (z1 > 0); gW1[:] = X.T @ d1; gb1[:] = d1.sum(0)
 
 
+def predict_dual(th, X, d, C, lam):
+    nb, nh = sizes(d, C)
+    W1, b1, W2, b2, W3g, b3g = views(th, d, C)
+    a2 = np.maximum(np.maximum(X @ W1 + b1, 0) @ W2 + b2, 0)
+    hl = th[nb + nh:]
+    z = lam * (a2 @ W3g + b3g) + (1 - lam) * (a2 @ hl[:H2 * C].reshape(H2, C) + hl[H2 * C:])
+    return z.argmax(1)
+
+
+def loss_grad_dual(th, g, X, y, cw, d, C):
+    """Shared body + global head (aggregated) + local head (never sent); loss = CE(global) + CE(local)."""
+    nb, nh = sizes(d, C); o = nb + nh
+    W1, b1, W2, b2, W3g, b3g = views(th, d, C)
+    gW1, gb1, gW2, gb2, gW3g, gb3g = views(g, d, C)
+    W3l = th[o:o + H2 * C].reshape(H2, C); b3l = th[o + H2 * C:]
+    gW3l = g[o:o + H2 * C].reshape(H2, C); gb3l = g[o + H2 * C:]
+    z1 = X @ W1 + b1; a1 = np.maximum(z1, 0)
+    z2 = a1 @ W2 + b2; a2 = np.maximum(z2, 0)
+    w = cw[y]; sw = w.sum(); idx = np.arange(len(y))
+    def grad_p(z):
+        z = z - z.max(1, keepdims=True); p = np.exp(z); p /= p.sum(1, keepdims=True)
+        p[idx, y] -= 1; p *= (w / sw)[:, None]
+        return p
+    pg = grad_p(a2 @ W3g + b3g); pl = grad_p(a2 @ W3l + b3l)
+    gW3g[:] = a2.T @ pg; gb3g[:] = pg.sum(0); gW3l[:] = a2.T @ pl; gb3l[:] = pl.sum(0)
+    d2 = (pg @ W3g.T + pl @ W3l.T) * (z2 > 0); gW2[:] = a1.T @ d2; gb2[:] = d2.sum(0)
+    d1 = (d2 @ W2.T) * (z1 > 0); gW1[:] = X.T @ d1; gb1[:] = d1.sum(0)
+
+
+def agg_trim(deltas, beta):
+    D_ = np.sort(np.asarray(deltas), axis=0); k = int(beta * len(D_))
+    return D_[k:len(D_) - k].mean(0)
+
+
 def class_weights(y, C, expo=0.5, cap=10.0):
     cnt = np.bincount(y, minlength=C); n = len(y)
     w = np.ones(C); nz = cnt > 0
@@ -59,7 +93,8 @@ def class_weights(y, C, expo=0.5, cap=10.0):
     return w
 
 
-def train_local(th, X, y, cw, d, C, epochs, lr, bs, rng, prox_ref=None, mu=0.0, adam=None):
+def train_local(th, X, y, cw, d, C, epochs, lr, bs, rng, prox_ref=None, mu=0.0, adam=None, lossfn=None):
+    lossfn = lossfn or loss_grad
     """Adam on the class-weighted CE; th is updated in place. Optional proximal term."""
     n = len(y); g = np.zeros_like(th)
     st = adam if adam is not None else {}
@@ -71,7 +106,7 @@ def train_local(th, X, y, cw, d, C, epochs, lr, bs, rng, prox_ref=None, mu=0.0, 
             idx = perm[s:s + bs]
             if len(idx) < 2:
                 continue
-            loss_grad(th, g, X[idx], y[idx], cw, d, C)
+            lossfn(th, g, X[idx], y[idx], cw, d, C)
             if prox_ref is not None:
                 g += mu * (th - prox_ref)
             st["t"] = t = st.get("t", 0) + 1
@@ -111,36 +146,41 @@ def metrics(y, p, C):
     prec = tp / np.maximum(pc, 1)
     f1 = 2 * tp / np.maximum(sup + pc, 1)
     far = cm[0, 1:].sum() / sup[0] if sup[0] > 0 else np.nan
+    att = cm[1:, :].sum()
+    miss = cm[1:, 0].sum() / att if att > 0 else np.nan
     return dict(f1=float(f1[pres].mean()), prec=float(prec[pres].mean()),
                 rec=float(rec[pres].mean()), acc=float(tp.sum() / cm.sum()),
-                far=float(far), recall=rec.tolist())
+                far=float(far), miss=float(miss), recall=rec.tolist())
 
 
-def eval_client_sets(models, sets, d, C):
+def eval_client_sets(models, sets, d, C, pf=None):
+    pf = pf or predict
     ys, ps = [], []
     for th, (X, y) in zip(models, sets):
-        ys.append(y); ps.append(predict(th, X, d, C))
+        ys.append(y); ps.append(pf(th, X, d, C))
     return metrics(np.concatenate(ys), np.concatenate(ps), C)
 
 
-def eval_global(models, X, y, d, C, n_clients=10):
+def eval_global(models, X, y, d, C, n_clients=10, pf=None):
+    pf = pf or predict
     seen, res = {}, []
     for th in models[:n_clients]:
         key = id(th)
         if key not in seen:
-            seen[key] = metrics(y, predict(th, X, d, C), C)
+            seen[key] = metrics(y, pf(th, X, d, C), C)
         res.append(seen[key])
-    out = {k: float(np.nanmean([r[k] for r in res])) for k in ["f1", "prec", "rec", "acc", "far"]}
+    out = {k: float(np.nanmean([r[k] for r in res])) for k in ["f1", "prec", "rec", "acc", "far", "miss"]}
     out["recall"] = np.nanmean(np.array([r["recall"] for r in res]), axis=0).tolist()
     return out
 
 
-def latency_ms(th, x1, d, C, reps=1000):
+def latency_ms(th, x1, d, C, reps=1000, pf=None):
+    predict_ = pf or predict
     for _ in range(20):
-        predict(th, x1, d, C)
+        predict_(th, x1, d, C)
     t0 = time.perf_counter()
     for _ in range(reps):
-        predict(th, x1, d, C)
+        predict_(th, x1, d, C)
     return (time.perf_counter() - t0) / reps * 1e3
 
 
@@ -151,30 +191,41 @@ SPEC = {
     "fedavg_comp": dict(personal=False, comp=True, mu=0.0),
     "fedper": dict(personal=True, comp=False, mu=0.0),
     "fedlitep": dict(personal=True, comp=True, mu=0.0),
+    "fedlitepg": dict(personal="dual", comp=True, mu=0.0),   # FedLite-P with an additional aggregated global head
     "ditto": dict(personal="ditto", comp=False, mu=0.0),
     "local": dict(personal=False, comp=False, mu=0.0),
 }
+LAMS = [0.0, 0.25, 0.5, 0.75, 1.0]
 
 
-def finish(models, fd, extra, d, C, curve, best_round, uplink, val_curve, lat):
-    out = dict(client=curve["best_rec"], glob=eval_global(models, fd["Xte"], fd["yte"], d, C),
+def finish(models, fd, extra, d, C, curve, best_round, uplink, val_curve, lat, pf=None):
+    out = dict(client=curve["best_rec"], glob=eval_global(models, fd["Xte"], fd["yte"], d, C, pf=pf),
                best_round=best_round, uplink=uplink, curve=curve["test_f1"], val_curve=val_curve,
                latency_ms=lat, extra={})
     for nm, (Xe, ye) in (extra or {}).items():
-        out["extra"][nm] = eval_global(models, Xe, ye, d, C)
+        out["extra"][nm] = eval_global(models, Xe, ye, d, C, pf=pf)
     return out
 
 
-def run_fed(name, fd, cfg, rng, extra=None):
+def run_fed(name, fd, cfg, rng, extra=None, agg="mean", beta=0.2):
+    """agg='trim' uses a coordinate-wise trimmed mean of the (decoded) updates instead of the weighted mean."""
     d, C, K = fd["d"], fd["C"], fd["K"]
     nb, nh = sizes(d, C)
     sp = SPEC[name]; personal = sp["personal"]
+    dual = personal == "dual"; pers_head = personal is True or dual
     mu = cfg["mu"] if sp["mu"] is None else sp["mu"]
     th0 = init_theta(d, C, rng)
     cws = [class_weights(y, C, cfg["cw_exp"], cfg["cw_cap"]) for y in fd["ytr"]]
     nk = np.array([len(y) for y in fd["ytr"]], float)
     ns = nb if personal is True else nb + nh
     comp = sp["comp"]
+    lam = cfg.get("lam", 0.5)
+    pf = (lambda th, X, d_, C_: predict_dual(th, X, d_, C_, lam)) if dual else None
+    lossfn = loss_grad_dual if dual else None
+    hon = fd.get("honest")   # poisoning experiments: evaluate honest clients only
+    sel = (lambda ms: [ms[k] for k in hon]) if hon is not None else (lambda ms: ms)
+    cval = [fd["cval"][k] for k in hon] if hon is not None else fd["cval"]
+    ctest = [fd["ctest"][k] for k in hon] if hon is not None else fd["ctest"]
     loc = None
     if name == "local":
         loc = [th0.copy() for _ in range(K)]
@@ -182,7 +233,7 @@ def run_fed(name, fd, cfg, rng, extra=None):
         g = th0.copy(); loc = [th0.copy() for _ in range(K)]
     else:
         g = th0[:ns].copy()
-        heads = [th0[nb:].copy() for _ in range(K)] if personal is True else None
+        heads = [th0[nb:].copy() for _ in range(K)] if pers_head else None
     resid = [np.zeros(ns) for _ in range(K)] if comp else None
     best, curve, vcurve = None, [], []
     for t in range(cfg["rounds"]):
@@ -193,38 +244,48 @@ def run_fed(name, fd, cfg, rng, extra=None):
         else:
             deltas = []
             for k in range(K):
-                th = np.concatenate([g, heads[k]]) if personal is True else g.copy()
+                th = np.concatenate([g, heads[k]]) if pers_head else g.copy()
                 ref = th.copy() if mu > 0 else None
                 train_local(th, fd["Xtr"][k], fd["ytr"][k], cws[k], d, C, cfg["E"], cfg["lr"], cfg["bs"], rng,
-                            prox_ref=ref, mu=mu)
+                            prox_ref=ref, mu=mu, lossfn=lossfn)
                 delta = th[:ns] - g
-                if personal is True:
-                    heads[k] = th[nb:].copy()
+                if pers_head:
+                    heads[k] = th[ns:].copy()
                 if comp:
                     vv = delta + resid[k]; dh = compress(vv, cfg["rho"]); resid[k] = vv - dh; delta = dh
                 deltas.append(delta)
                 if personal == "ditto":
                     train_local(loc[k], fd["Xtr"][k], fd["ytr"][k], cws[k], d, C, cfg["E"], cfg["lr"], cfg["bs"], rng,
                                 prox_ref=g.copy(), mu=cfg["ditto_lambda"])
-            g = g + (nk[:, None] * np.array(deltas)).sum(0) / nk.sum()
+            if agg == "trim":
+                g = g + agg_trim(deltas, beta)
+            else:
+                g = g + (nk[:, None] * np.array(deltas)).sum(0) / nk.sum()
             if personal == "ditto":
                 models = loc
-            elif personal is True:
+            elif pers_head:
                 models = [np.concatenate([g, h]) for h in heads]
             else:
                 models = [g] * K
-        vm = eval_client_sets(models, fd["cval"], d, C)["f1"]
-        tm = eval_client_sets(models, fd["ctest"], d, C)
+        vm = eval_client_sets(sel(models), cval, d, C, pf)["f1"]
+        tm = eval_client_sets(sel(models), ctest, d, C, pf)
         vcurve.append(vm); curve.append(tm["f1"])
         if best is None or vm > best[0]:
-            if models is loc or personal is True:
+            if models is loc or pers_head:
                 snap = [m.copy() for m in models]
             else:
                 c = g.copy(); snap = [c] * K
             best = (vm, t + 1, snap, tm)
     uplink = 0 if name == "local" else uplink_bytes(ns, cfg["rho"], comp)
-    lat = latency_ms(best[2][0], fd["Xte"][:1], d, C)
-    return finish(best[2], fd, extra, d, C, dict(test_f1=curve, best_rec=best[3]), best[1], uplink, vcurve, lat)
+    lat = latency_ms(best[2][0], fd["Xte"][:1], d, C, pf=pf)
+    out = finish(sel(best[2]), fd, extra, d, C, dict(test_f1=curve, best_rec=best[3]), best[1], uplink, vcurve, lat, pf)
+    if dual:  # sensitivity to the mixing weight, same trained models
+        out["lam_sweep"] = {}
+        for l_ in LAMS:
+            p_ = (lambda th, X, d_, C_, l_=l_: predict_dual(th, X, d_, C_, l_))
+            out["lam_sweep"][str(l_)] = dict(client=eval_client_sets(best[2], fd["ctest"], d, C, p_),
+                                            glob=eval_global(best[2], fd["Xte"], fd["yte"], d, C, pf=p_))
+    return out
 
 
 def run_central(fd, cfg, rng, extra=None):
