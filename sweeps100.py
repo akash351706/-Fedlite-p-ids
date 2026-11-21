@@ -1,4 +1,4 @@
-"""alpha and rho sweeps at T = 100 rounds (5 seeds). Saves/resumes results/sweeps100_raw.json.
+"""alpha and rho sweeps at T = 100 rounds (5 seeds). Saves/resumes sweeps100_raw.json.
   python sweeps100.py --data-dir /path/to/InSDN_DatasetCSV
 """
 import argparse, json, os, time
@@ -7,7 +7,7 @@ from run_experiments import run_methods, MAIN_METHODS
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--data-dir", required=True, help="folder with Normal_data.csv, OVS.csv, metasploitable-2.csv")
-ap.add_argument("--out", default="results/sweeps100_raw.json")
+ap.add_argument("--out", default="sweeps100_raw.json")
 ap.add_argument("--seeds", type=int, default=5)
 a = ap.parse_args()
 cfg = dict(K=20, rounds=100, E=1, lr=1e-3, bs=128, mu=0.01, ditto_lambda=0.1, cw_exp=0.5, cw_cap=10.0,
